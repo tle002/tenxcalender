@@ -33,6 +33,15 @@ const llm: LLM = {
           { type: "move", eventId: crit.id, reason: "Frees Thursday morning", to: { start: at(demo.start, 15, 30), end: at(demo.start, 16, 30) } },
         ] } }] };
     }
+    if (first.includes("EARLIER REQUEST")) {
+      const d = new Date(); do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
+      d.setHours(14, 0, 0, 0);
+      return { content: [{ type: "tool_use", id: "q2", name: "propose_plan", input: { summary: "Booked after your answer.", changes: [
+        { type: "create", title: "Meeting with Ujjawal", reason: "Matches your answer", to: { start: toLocalISO(d), end: toLocalISO(new Date(d.getTime() + 30 * 60_000)) } } ] } }] };
+    }
+    if (first.includes("saturday")) {
+      return { content: [{ type: "tool_use", id: "q1", name: "propose_plan", input: { summary: "Saturday is outside your working days. Which day works instead?", changes: [], needs_answer: true, clarify_options: ["Fri 4 Dec, after lunch", "Mon 7 Dec, 10am"] } }] };
+    }
     if (first.includes("link")) {
       const d = new Date(); do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
       d.setHours(16, 0, 0, 0);

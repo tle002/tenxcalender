@@ -5,6 +5,15 @@ they appear on the calendar as ghost events, and nothing is written until you ap
 
 > Status: **Steps 1-2 done** (mock calendar, week view, command bar, AI planning, ghost events, apply/discard). Focus time and briefing next.
 
+## Features
+
+- Command bar: state an intent, review ghost events, then Apply.
+- Briefing tab: conflicts, back-to-backs, heavy days, focus collisions, each with one-click fixes.
+- Focus-time defender, History with Undo (newest change first), Rules tab.
+- Day, week and month views.
+
+See [docs/WRITEUP.md](docs/WRITEUP.md) for the thinking behind it and [docs/DEMO.md](docs/DEMO.md) for the demo script.
+
 ## Structure
 ```
 backend/    Express + TypeScript API (port 4000): providers, AI, detectors, routes

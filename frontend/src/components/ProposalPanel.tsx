@@ -11,6 +11,8 @@ interface Props {
   onSwap: (changeId: string, altIndex: number) => void;
   onApply: () => void;
   onDiscard: () => void;
+  onReply: (text: string) => void;
+  replyBusy: boolean;
 }
 
 const BADGE: Record<Change["type"], string> = { create: "New", move: "Move", decline: "Decline", shorten: "Shorten" };
@@ -23,7 +25,7 @@ function describeChange(c: Change): string {
   return "";
 }
 
-export default function ProposalPanel({ plan, excluded, applying, onToggle, onSwap, onApply, onDiscard }: Props) {
+export default function ProposalPanel({ plan, excluded, applying, onToggle, onSwap, onApply, onDiscard, onReply, replyBusy }: Props) {
   if (!plan) {
     return (
       <div>
@@ -35,11 +37,27 @@ export default function ProposalPanel({ plan, excluded, applying, onToggle, onSw
     );
   }
 
+  const asking = Boolean(plan.clarify);
   const count = plan.changes.filter((c) => !excluded.has(c.id)).length;
 
   return (
     <div>
-      <p className="summary">{plan.summary}</p>
+      {asking ? (
+        <div className="question">
+          <div className="question-label">One quick question</div>
+          <p className="question-text">{plan.summary}</p>
+          {plan.clarify!.options.length > 0 && (
+            <div className="question-options">
+              {plan.clarify!.options.map((o) => (
+                <button key={o} className="option" disabled={replyBusy} onClick={() => onReply(o)}>{o}</button>
+              ))}
+            </div>
+          )}
+          <p className="muted small">Or type your answer in the box at the bottom. Nothing changes until there is a plan to apply.</p>
+        </div>
+      ) : (
+        <p className="summary">{plan.summary}</p>
+      )}
       {plan.rulesApplied && plan.rulesApplied.length > 0 && (
         <div className="rules-used">
           <span className="alts-label">Used your rules</span>
@@ -95,7 +113,7 @@ export default function ProposalPanel({ plan, excluded, applying, onToggle, onSw
 
       <div className="panel-actions">
         <button className="btn" onClick={onDiscard} disabled={applying}>
-          {plan.changes.length ? "Discard" : "Dismiss"}
+          {plan.changes.length ? "Discard" : asking ? "Cancel" : "Dismiss"}
         </button>
         {plan.changes.length > 0 && (
           <button className="btn btn-primary" onClick={onApply} disabled={applying || count === 0}>

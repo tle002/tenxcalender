@@ -40,8 +40,8 @@ export const api = {
   events: (start: string, end: string) =>
     request<{ events: CalEvent[] }>(`/api/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
   reset: () => request<{ ok: boolean }>("/api/reset", { method: "POST" }),
-  plan: (intent: string, currentPlan?: Plan | null) =>
-    request<{ plan: Plan }>("/api/plan", { method: "POST", body: JSON.stringify({ intent, currentPlan }) }),
+  plan: (intent: string, currentPlan?: Plan | null, clarification?: { intent: string; question: string } | null) =>
+    request<{ plan: Plan }>("/api/plan", { method: "POST", body: JSON.stringify({ intent, currentPlan, clarification }) }),
   apply: (changes: Change[], meta: { intent?: string; source?: string; summary?: string } = {}) =>
     request<{ applied: { id: string; type: string; title: string; link?: string; eventId?: string }[]; failed: { id: string; error: string }[]; historyId?: string }>(
       "/api/apply",

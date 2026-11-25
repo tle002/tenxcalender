@@ -41,6 +41,8 @@ export interface Plan {
   source?: "command" | "fix" | "focus";
   rulesApplied?: string[];
   trace?: string[];
+  clarify?: { options: string[] };
+  intent?: string;
 }
 
 export interface Fix {

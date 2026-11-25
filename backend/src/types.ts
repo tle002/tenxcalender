@@ -48,6 +48,8 @@ export interface Plan {
   source?: "command" | "fix" | "focus";
   rulesApplied?: string[]; // which of the user's rules shaped this plan
   trace?: string[]; // human-readable steps the planner took
+  clarify?: { options: string[] }; // set when the planner is asking the user a question
+  intent?: string; // the original request a clarification belongs to
 }
 
 export interface CreateInput {

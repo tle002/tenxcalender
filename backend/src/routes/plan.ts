@@ -23,6 +23,11 @@ export function realLLM(): LLMConfig | null {
   return { llm: { create: (p) => client.messages.create(p as any) as any }, model: config.anthropicModel };
 }
 
+function parseClarification(v: any): { intent: string; question: string } | null {
+  if (!v || typeof v.intent !== "string" || typeof v.question !== "string") return null;
+  return { intent: v.intent.slice(0, 500), question: v.question.slice(0, 500) };
+}
+
 export function createPlanRouter(getLLM: () => LLMConfig | null = realLLM) {
   const router = Router();
 
@@ -37,7 +42,7 @@ export function createPlanRouter(getLLM: () => LLMConfig | null = realLLM) {
       if (!cfg) return res.status(503).json({ error: "ANTHROPIC_API_KEY is not set. Add it to backend/.env and restart the backend." });
 
       const provider = getProvider();
-      const raw = await runPlanner({ llm: cfg.llm, model: cfg.model, provider, intent, currentPlan: req.body?.currentPlan ?? null, rules: loadRules() });
+      const raw = await runPlanner({ llm: cfg.llm, model: cfg.model, provider, intent, currentPlan: req.body?.currentPlan ?? null, rules: loadRules(), clarification: parseClarification(req.body?.clarification) });
       const { changes, errors } = await validateChanges(provider, raw.changes);
       log.info("plan validated", {
         changes: changes.map((c) => ({ id: c.id, type: c.type, title: c.title ?? c.eventTitle, when: c.to ? `${describe(new Date(c.to.start))} - ${describe(new Date(c.to.end))}` : undefined, warning: c.warning, addMeetLink: c.addMeetLink })),
@@ -50,6 +55,7 @@ export function createPlanRouter(getLLM: () => LLMConfig | null = realLLM) {
         source: "command",
         rulesApplied: raw.rulesApplied,
         trace: raw.trace,
+        ...(raw.clarify && !changes.length ? { clarify: raw.clarify, intent: parseClarification(req.body?.clarification)?.intent ?? intent } : {}),
       };
       res.json({ plan });
     } catch (err) {

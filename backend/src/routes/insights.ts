@@ -77,6 +77,8 @@ export function createInsightsRouter(getLLM: () => LLMConfig | null) {
       const entry = h.get(req.params.id);
       if (!entry) return res.status(404).json({ error: "That entry was not found." });
       if (entry.undoneAt) return res.status(400).json({ error: "Already undone." });
+      const latest = h.list().find((e) => !e.undoneAt);
+      if (latest && latest.id !== entry.id) return res.status(409).json({ error: "Only the most recent change can be undone. Undo the newer ones first." });
       const result = await undoEntry(getProvider(), entry);
       h.markUndone(entry.id, result.notes);
       log.info("undo", { id: entry.id, ...result });

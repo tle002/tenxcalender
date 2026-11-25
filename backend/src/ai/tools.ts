@@ -37,7 +37,7 @@ export const TOOLS = [
   {
     name: "find_common_slots",
     description:
-      "Find the best meeting slots when the user and all listed attendees are free. Computed by code, so results never overlap anyone's busy time. Prefer this over reasoning about free/busy yourself. Slots already avoid weekends and the past.",
+      "Find the best meeting slots when the user and all listed attendees are free. Computed by code, so results never overlap anyone's busy time. Prefer this over reasoning about free/busy yourself. Slots avoid weekends and the past unless include_weekends is true.",
     input_schema: {
       type: "object",
       properties: {
@@ -48,6 +48,7 @@ export const TOOLS = [
         earliest_hour: { type: "integer", description: "Earliest start hour, 0-23. Defaults to the user's working hours. 'Not mornings' means 12." },
         latest_hour: { type: "integer", description: "Meeting must end by this hour, 1-24. Defaults to the user's working hours." },
         max_results: { type: "integer", description: "Default 5" },
+        include_weekends: { type: "boolean", description: "Set true ONLY when the user explicitly asks for a Saturday or Sunday." },
       },
       required: ["emails", "duration_minutes", "range_start", "range_end"],
     },
@@ -74,6 +75,8 @@ export const TOOLS = [
       type: "object",
       properties: {
         summary: { type: "string", description: "1-2 plain sentences for the user describing the plan or the question you need answered." },
+        needs_answer: { type: "boolean", description: "True when you are asking the user a question and proposing no changes because you need their answer." },
+        clarify_options: { type: "array", items: { type: "string" }, description: "When needs_answer is true: 2-3 short, complete replies the user could click, e.g. 'Fri 4 Dec, 2pm'. Each must work as a standalone answer." },
         rules_applied: { type: "array", items: { type: "string" }, description: "Which of the user's rules or preferences shaped this plan, in a few words each (e.g. 'Lunch 13:00-14:00 kept free'). Empty if none." },
         changes: {
           type: "array",
@@ -181,6 +184,7 @@ export async function executeTool(name: string, input: Record<string, any>, ctx:
         myEvents,
         now: ctx.now,
         maxResults: Number(input.max_results ?? 5),
+        includeWeekends: input.include_weekends === true,
       });
       return {
         slots: slots.map((s) => ({ day: dayName(s.start), start: toLocalISO(s.start), end: toLocalISO(s.end) })),

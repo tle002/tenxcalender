@@ -31,7 +31,9 @@ How you work:
 - If the user asks for a link, video call, Meet or Zoom, set addMeetLink true on that create change.
 - Title new meetings sensibly (e.g. "Sync: Priya, Sam") and put attendee emails in "attendees".
 - If a CURRENT PLAN is provided and the user's message is a follow-up ("make it Thursday", "shorter", "drop Sam"), return the full revised plan, changing only what they asked.
-- If the request is ambiguous, impossible, or no slot exists, return an empty changes array and say why in summary (one short question at most).
+- If the user explicitly names a Saturday or Sunday, honour it: use include_weekends true, and mention in the summary that it is outside their usual working days. Never refuse only because of working hours when the user stated the day or time themselves.
+- If you need information to continue (which day, who, how long) or no slot exists, return an empty changes array, set needs_answer true, ask ONE short question in summary, and give 2-3 clickable replies in clarify_options (concrete, e.g. "Fri 4 Dec, after lunch"). Offer real alternatives you found with the tools, not generic ones.
+- If an EARLIER REQUEST and your QUESTION are shown, the user's message is the answer: combine them and complete the original request.
 - Keep reasons and summaries short and in plain language.`;
 }
 
@@ -41,6 +43,7 @@ export interface PlannerArgs {
   provider: CalendarProvider;
   intent: string;
   currentPlan?: Plan | null;
+  clarification?: { intent: string; question: string } | null;
   now?: Date;
   rules?: Rules;
 }
@@ -50,6 +53,7 @@ export interface RawPlan {
   changes: unknown[];
   rulesApplied: string[];
   trace: string[];
+  clarify?: { options: string[] };
 }
 
 function traceLine(name: string, input: Record<string, any>, out: any): string {
@@ -63,9 +67,11 @@ function traceLine(name: string, input: Record<string, any>, out: any): string {
   }
 }
 
-export async function runPlanner({ llm, model, provider, intent, currentPlan, now = new Date(), rules = DEFAULT_RULES }: PlannerArgs): Promise<RawPlan> {
+export async function runPlanner({ llm, model, provider, intent, currentPlan, clarification, now = new Date(), rules = DEFAULT_RULES }: PlannerArgs): Promise<RawPlan> {
   const trace: string[] = [];
-  const userText = currentPlan?.changes?.length
+  const userText = clarification
+    ? `EARLIER REQUEST: ${clarification.intent}\nYOUR QUESTION: ${clarification.question}\nUSER REPLY: ${intent}`
+    : currentPlan?.changes?.length
     ? `CURRENT PLAN:\n${JSON.stringify(currentPlan.changes.map(({ warning, eventTitle, from, ...c }) => c))}\n\nUSER FOLLOW-UP: ${intent}`
     : `USER REQUEST: ${intent}`;
 
@@ -104,6 +110,9 @@ export async function runPlanner({ llm, model, provider, intent, currentPlan, no
         changes: Array.isArray(input.changes) ? input.changes : [],
         rulesApplied: Array.isArray(input.rules_applied) ? input.rules_applied.map(String).slice(0, 6) : [],
         trace,
+        ...(input.needs_answer === true && !(Array.isArray(input.changes) && input.changes.length)
+          ? { clarify: { options: Array.isArray(input.clarify_options) ? input.clarify_options.map(String).slice(0, 3) : [] } }
+          : {}),
       };
       log.info("planner proposed", proposed);
       return proposed;

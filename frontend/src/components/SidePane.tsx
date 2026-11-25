@@ -92,6 +92,7 @@ export function HistoryPanel({ refreshKey, onUndone, onError }: { refreshKey: nu
     }
   };
 
+  const latestId = items.find((h) => !h.undoneAt)?.id; // only the newest applied change can be undone
   if (!items.length) return <p className="muted">Nothing applied yet. Every change you approve is listed here and can be undone.</p>;
   return (
     <div className="history">
@@ -108,9 +109,9 @@ export function HistoryPanel({ refreshKey, onUndone, onError }: { refreshKey: nu
               <button className="btn" onClick={() => setConfirm(null)} disabled={busy}>Cancel</button>
               <button className="btn btn-primary" onClick={() => undo(h.id)} disabled={busy}>{busy ? "Undoing…" : "Undo"}</button>
             </div>
-          ) : (
+          ) : h.id === latestId ? (
             <button className="btn" onClick={() => setConfirm(h.id)}>Undo</button>
-          )}
+          ) : null}
         </div>
       ))}
     </div>

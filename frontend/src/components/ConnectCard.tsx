@@ -12,7 +12,7 @@ export default function ConnectCard({ configured, onConnect }: Props) {
     <div className="hero-wrap">
       <div className="hero">
         <div className="hero-logo"><Logo size={84} /></div>
-        <h1 className="hero-title">Say what you need.<br /><span className="grad-text">Your calendar handles the rest.</span></h1>
+        <h1 className="hero-title">Say what you need.<br /><span className="c-blue">Your</span> <span className="c-red">calendar</span> <span className="c-yellow">handles</span> <span className="c-green">the rest.</span></h1>
         <p className="hero-sub">
           tenxcalender reads your Google Calendar, plans changes as ghost events you can preview, and only writes (and sends invites) after you press Apply.
         </p>

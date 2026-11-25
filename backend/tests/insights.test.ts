@@ -67,6 +67,17 @@ test("apply records history, undo reverses it, and undo is refused when the even
   assert.equal((await j(`/api/history/${hist[0].id}/undo`, "POST")).status, 400); // already undone
 });
 
+test("only the most recent applied change can be undone", async () => {
+  const plan = (await j("/api/focus/plan", "POST", { start: ws.toISOString(), end: addDays(ws, 7).toISOString() })).body.plan;
+  assert.ok(plan.changes.length >= 2);
+  await j("/api/apply", "POST", { changes: [plan.changes[0]], intent: "first", source: "focus" });
+  await j("/api/apply", "POST", { changes: [plan.changes[1]], intent: "second", source: "focus" });
+  const [newer, older] = (await j("/api/history")).body.history.filter((h: any) => !h.undoneAt);
+  assert.equal((await j(`/api/history/${older.id}/undo`, "POST")).status, 409);
+  assert.equal((await j(`/api/history/${newer.id}/undo`, "POST")).status, 200);
+  assert.equal((await j(`/api/history/${older.id}/undo`, "POST")).status, 200); // now it is the newest
+});
+
 test("undo of a move restores the original time", async () => {
   const evs = (await j(`/api/events?${q}`)).body.events;
   const m = evs.find((e: any) => e.kind === "meeting" && e.organizer === "you@acme.com") ?? evs.find((e: any) => e.kind === "meeting");
@@ -85,4 +96,30 @@ test("rules round-trip and are sanitised", async () => {
   assert.equal(r.body.rules.workStart, 8);
   assert.equal((await j("/api/rules")).body.rules.notes, "Fridays light");
   await j("/api/rules", "PUT", { rules: { focusHoursPerDay: 2, workStart: 9, notes: "" } });
+});
+
+test("planner questions become clarifications and the reply keeps the original request", async () => {
+  const seen: string[] = [];
+  let n = 0;
+  const llm = {
+    async create(p: any) {
+      seen.push(String(p.messages[0].content));
+      n++;
+      const input = n === 1
+        ? { summary: "Which day works?", changes: [], needs_answer: true, clarify_options: ["Fri 4 Dec, 2pm", "Mon 7 Dec, 10am", "x", "y"] }
+        : { summary: "Done", changes: [] };
+      return { content: [{ type: "tool_use", id: "t" + n, name: "propose_plan", input }] };
+    },
+  };
+  const app = createApp(() => ({ llm, model: "fake" })).listen(0);
+  const b = `http://localhost:${(app.address() as AddressInfo).port}`;
+  const post = (body: unknown) => fetch(b + "/api/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json() as Promise<any>);
+  const first = await post({ intent: "meeting with ujjawal on Saturday" });
+  assert.equal(first.plan.clarify.options.length, 3);
+  assert.equal(first.plan.intent, "meeting with ujjawal on Saturday");
+  await post({ intent: "Fri 4 Dec, 2pm", clarification: { intent: first.plan.intent, question: first.plan.summary } });
+  assert.match(seen[1], /EARLIER REQUEST: meeting with ujjawal on Saturday/);
+  assert.match(seen[1], /YOUR QUESTION: Which day works\?/);
+  assert.match(seen[1], /USER REPLY: Fri 4 Dec, 2pm/);
+  app.close();
 });

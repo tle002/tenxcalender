@@ -28,6 +28,8 @@ export default function Home() {
   const [tab, setTab] = useState<Tab>("briefing");
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastIntent, setLastIntent] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ intent: string; question: string } | null>(null);
   const [recents, setRecents] = useState<string[]>([]);
   // The briefing always covers one work week, whichever view (day/week/month) is showing.
   const briefingRange = useMemo(() => {
@@ -113,12 +115,14 @@ export default function Home() {
     setPlanning(true);
     clientLog("info", "plan requested", { text, refining: Boolean(plan?.changes.length) });
     try {
-      const { plan: next } = await api.plan(text, plan);
+      const { plan: next } = await api.plan(text, plan, pending);
       clientLog("info", "plan received", { summary: next.summary, changes: next.changes.length, dropped: next.warnings });
       setPlan(next);
       setExcluded(new Set());
       setTab("plan");
-      setLastIntent(text);
+      const original = pending?.intent ?? text;
+      setPending(next.clarify ? { intent: next.intent ?? original, question: next.summary } : null);
+      setLastIntent(original);
       setRecents((r) => {
         const n = [text, ...r.filter((x) => x !== text)].slice(0, 4);
         try { localStorage.setItem("tenx.recents", JSON.stringify(n)); } catch { /* ignore */ }
@@ -198,6 +202,7 @@ export default function Home() {
   };
 
   const discard = () => {
+    setPending(null);
     setPlan(null);
     setExcluded(new Set());
   };
@@ -254,8 +259,7 @@ export default function Home() {
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brand"><Logo size={36} /><div className="brand-name">tenxcalender<span className="brand-tag">Your calendar, on intent</span></div></div>
-        <CommandBar busy={planning} disabled={needsConnect} refining={Boolean(plan && plan.changes.length)} examples={[...recents, ...(isMock ? DEMO_EXAMPLES : GOOGLE_EXAMPLES)].filter((x, i, a) => a.indexOf(x) === i).slice(0, 5)} onSubmit={submit} />
+        <div className="brand"><Logo size={36} /><div className="brand-name"><span className="wordmark" aria-label="tenxcalender">{"tenxcalender".split("").map((c, i) => <span key={i} className={`wm-${i % 4}`}>{c}</span>)}</span><span className="brand-tag">Your calendar, on intent</span></div></div>
         <div className="topbar-right">
           <span className="mode" title={isMock ? "Changes stay inside this app. Nothing is sent to Google Calendar." : "Connected to Google Calendar"}>
             {!health ? "connecting…" : isMock ? "Demo calendar" : health.connected ? `Google · ${health.email}` : "Not connected"}
@@ -286,9 +290,6 @@ export default function Home() {
         <ConnectCard configured={health?.googleConfigured ?? false} onConnect={() => { clientLog("info", "connect google clicked"); window.location.href = api.authUrl; }} />
       ) : (
       <main className="main">
-        <section className="calendar-pane">
-          <WeekCalendar events={events} changes={included} focusDate={focusDate} onRange={onRange} />
-        </section>
         <aside className="side-pane">
           <div className="tabs" role="tablist">
             {(["briefing", "plan", "history", "rules"] as Tab[]).map((t) => (
@@ -303,12 +304,40 @@ export default function Home() {
               <button className="btn focus-btn" onClick={protectFocus} disabled={planning}>Protect focus time this week</button>
             </>
           )}
-          {tab === "plan" && <ProposalPanel plan={plan} excluded={excluded} applying={applying} onToggle={toggle} onSwap={swap} onApply={apply} onDiscard={discard} />}
+          {tab === "plan" && <ProposalPanel onReply={(t) => void submit(t)} replyBusy={planning} plan={plan} excluded={excluded} applying={applying} onToggle={toggle} onSwap={swap} onApply={apply} onDiscard={discard} />}
           {tab === "history" && <HistoryPanel refreshKey={refreshKey} onUndone={afterUndo} onError={onPaneError} />}
           {tab === "rules" && <RulesPanel onError={onPaneError} onSaved={() => setRefreshKey((k) => k + 1)} />}
         </aside>
+        <section className="calendar-pane">
+          <WeekCalendar events={events} changes={included} focusDate={focusDate} onRange={onRange} onEventClick={setOpenId} />
+        </section>
       </main>
       )}
+
+      {openId && (() => {
+        const ev = events.find((e) => e.id === openId);
+        if (!ev) return null;
+        return (
+          <div className="modal-back" onClick={() => setOpenId(null)}>
+            <div className="modal" role="dialog" aria-label="Event details" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-title">{ev.title}</div>
+              <div className="modal-row">{fmtRange({ start: ev.start, end: ev.end })}</div>
+              {ev.kind === "focus" && <div className="modal-row">Focus time</div>}
+              {ev.organizer && <div className="modal-row">Organiser: {ev.organizer}</div>}
+              {ev.status === "needsAction" && <div className="modal-row">You have not responded to this invite</div>}
+              {ev.attendees.length > 0 && <div className="modal-row">With {ev.attendees.join(", ")}</div>}
+              <div className="modal-actions">
+                {ev.meetLink && <a className="btn btn-primary" href={ev.meetLink} target="_blank" rel="noreferrer">Join with Google Meet</a>}
+                <button className="btn" onClick={() => setOpenId(null)}>Close</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      <footer className="dock">
+        <CommandBar busy={planning} disabled={needsConnect} refining={Boolean(plan && plan.changes.length)} replying={Boolean(pending)} examples={[...recents, ...(isMock ? DEMO_EXAMPLES : GOOGLE_EXAMPLES)].filter((x, i, a) => a.indexOf(x) === i).slice(0, 5)} onSubmit={submit} />
+      </footer>
     </div>
   );
 }

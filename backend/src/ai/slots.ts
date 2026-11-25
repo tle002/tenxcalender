@@ -15,6 +15,7 @@ export interface SlotQuery {
   now: Date;
   maxResults: number;
   stepMin?: number;
+  includeWeekends?: boolean; // only when the user explicitly asks for a weekend day
   lunch?: { start: number; end: number } | null; // hours; slots overlapping it are ranked lower
 }
 
@@ -38,7 +39,7 @@ export function findCommonSlots(q: SlotQuery): Slot[] {
   let dayIndex = 0;
   for (let day = startOfDay(q.rangeStart); day < q.rangeEnd; day = addDays(day, 1)) {
     const dow = day.getDay();
-    if (dow === 0 || dow === 6) continue;
+    if (!q.includeWeekends && (dow === 0 || dow === 6)) continue;
 
     const winStart = new Date(day);
     winStart.setHours(q.earliestHour, 0, 0, 0);

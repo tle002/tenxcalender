@@ -22,6 +22,7 @@ interface Props {
   changes: Change[]; // only the changes currently included in the plan
   focusDate: string | null; // scroll the calendar to this date when it changes
   onRange: (start: string, end: string) => void;
+  onEventClick: (id: string) => void;
 }
 
 interface ExtProps {
@@ -30,7 +31,7 @@ interface ExtProps {
   trim?: boolean;
 }
 
-export default function WeekCalendar({ events, changes, focusDate, onRange }: Props) {
+export default function WeekCalendar({ events, changes, focusDate, onRange, onEventClick }: Props) {
   const ref = useRef<FullCalendar>(null);
 
   // Real events + ghost events for the proposed plan.
@@ -49,7 +50,7 @@ export default function WeekCalendar({ events, changes, focusDate, onRange }: Pr
       if (c?.type === "decline") cls.push("orig-decline");
       if (c?.type === "move") cls.push("orig-move");
       out.push({
-        id: e.id, title: e.title, start: e.start, end: e.end, classNames: cls, url: e.meetLink,
+        id: e.id, title: e.title, start: e.start, end: e.end, classNames: cls,
         extendedProps: { change: c ?? null } satisfies ExtProps,
       });
     }
@@ -75,6 +76,12 @@ export default function WeekCalendar({ events, changes, focusDate, onRange }: Pr
     return out;
   }, [events, changes]);
 
+  // Weekends stay hidden unless the plan (or an event) lands on one.
+  const showWeekends = useMemo(() => {
+    const isWeekend = (iso?: string) => (iso ? [0, 6].includes(new Date(iso).getDay()) : false);
+    return changes.some((c) => isWeekend(c.to?.start)) || events.some((e) => isWeekend(e.start));
+  }, [changes, events]);
+
   // Jump to the week that holds the plan if it is not on screen.
   useEffect(() => {
     if (!focusDate) return;
@@ -90,7 +97,7 @@ export default function WeekCalendar({ events, changes, focusDate, onRange }: Pr
       plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin]}
       initialView="timeGridWeek"
       initialDate={initialDate()}
-      weekends={false}
+      weekends={showWeekends}
       allDaySlot={false}
       nowIndicator
       slotMinTime="08:00:00"
@@ -104,10 +111,8 @@ export default function WeekCalendar({ events, changes, focusDate, onRange }: Pr
       fixedWeekCount={false}
       events={fcEvents}
       eventClick={(info) => {
-        if (info.event.url) {
-          info.jsEvent.preventDefault();
-          window.open(info.event.url, "_blank", "noopener");
-        }
+        info.jsEvent.preventDefault(); // never navigate; show the details card instead
+        if (!info.event.id.startsWith("ghost:") && !info.event.id.startsWith("trim:")) onEventClick(info.event.id);
       }}
       datesSet={(arg) => onRange(arg.start.toISOString(), arg.end.toISOString())}
       eventTimeFormat={{ hour: "numeric", minute: "2-digit", meridiem: "short" }}
@@ -141,8 +146,9 @@ export default function WeekCalendar({ events, changes, focusDate, onRange }: Pr
           );
         }
         return (
-          <div className="ev">
-            <span className="ev-time">{arg.timeText}</span> <span className="ev-title">{arg.event.title}</span>
+          <div className="ev ev-plain">
+            <div className="ev-title">{arg.event.title}</div>
+            {(arg.event.end?.getTime() ?? 0) - (arg.event.start?.getTime() ?? 0) > 35 * 60_000 && <div className="ev-time">{arg.timeText}</div>}
           </div>
         );
       }}
