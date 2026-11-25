@@ -82,6 +82,18 @@ export class MockProvider implements CalendarProvider {
     return ev;
   }
 
+  async remove(eventId: string): Promise<void> {
+    const i = this.events.findIndex((x) => x.id === eventId);
+    if (i < 0) throw new Error(`Event not found: ${eventId}`);
+    this.events.splice(i, 1);
+  }
+
+  async restore(eventId: string): Promise<void> {
+    const ev = this.events.find((x) => x.id === eventId);
+    if (!ev) throw new Error(`Event not found: ${eventId}`);
+    ev.status = "accepted";
+  }
+
   async decline(eventId: string): Promise<void> {
     const ev = this.events.find((x) => x.id === eventId);
     if (!ev) throw new Error(`Event not found: ${eventId}`);

@@ -26,22 +26,26 @@ function describeChange(c: Change): string {
 export default function ProposalPanel({ plan, excluded, applying, onToggle, onSwap, onApply, onDiscard }: Props) {
   if (!plan) {
     return (
-      <aside className="side-pane">
-        <h2 className="side-title">Proposed changes</h2>
+      <div>
         <p className="muted">
-          Nothing proposed yet. Describe what you need and the plan appears here and on the calendar as ghost events.
+          Nothing proposed yet. Describe what you need, or open Briefing for one-click fixes. Plans appear here and on the calendar as ghost events.
           Nothing is written until you apply it.
         </p>
-      </aside>
+      </div>
     );
   }
 
   const count = plan.changes.filter((c) => !excluded.has(c.id)).length;
 
   return (
-    <aside className="side-pane">
-      <h2 className="side-title">Proposed changes</h2>
+    <div>
       <p className="summary">{plan.summary}</p>
+      {plan.rulesApplied && plan.rulesApplied.length > 0 && (
+        <div className="rules-used">
+          <span className="alts-label">Used your rules</span>
+          {plan.rulesApplied.map((r, i) => <span key={i} className="rule-chip">{r}</span>)}
+        </div>
+      )}
 
       {plan.warnings && plan.warnings.length > 0 && (
         <ul className="warn-list">
@@ -81,6 +85,14 @@ export default function ProposalPanel({ plan, excluded, applying, onToggle, onSw
         })}
       </div>
 
+      {plan.trace && plan.trace.length > 0 && (
+        <details className="trace">
+          <summary>How I got this</summary>
+          <ol>{plan.trace.map((t, i) => <li key={i}>{t}</li>)}</ol>
+          <p className="muted small">Times come from your calendar and your rules, computed by code. The model only chose what to look for.</p>
+        </details>
+      )}
+
       <div className="panel-actions">
         <button className="btn" onClick={onDiscard} disabled={applying}>
           {plan.changes.length ? "Discard" : "Dismiss"}
@@ -91,6 +103,6 @@ export default function ProposalPanel({ plan, excluded, applying, onToggle, onSw
           </button>
         )}
       </div>
-    </aside>
+    </div>
   );
 }

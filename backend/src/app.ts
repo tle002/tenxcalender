@@ -8,6 +8,7 @@ import { NotConnectedError, dropAuthIfInvalid } from "./providers/index.js";
 import { readAuth } from "./google/tokenStore.js";
 import { googleConfigured } from "./google/oauth.js";
 import { eventsRouter } from "./routes/events.js";
+import { createInsightsRouter } from "./routes/insights.js";
 
 export function createApp(getLLM: () => LLMConfig | null = realLLM) {
   const app = express();
@@ -47,6 +48,7 @@ export function createApp(getLLM: () => LLMConfig | null = realLLM) {
   app.use("/api", authRouter);
   app.use("/api", eventsRouter);
   app.use("/api", createPlanRouter(getLLM));
+  app.use("/api", createInsightsRouter(getLLM));
 
   // Central error handler: log server-side, return a plain message.
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

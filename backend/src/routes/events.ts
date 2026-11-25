@@ -1,3 +1,4 @@
+import { resetHistory } from "../state.js";
 import { Router } from "express";
 import { getProvider, isMock } from "../providers/index.js";
 
@@ -39,6 +40,7 @@ eventsRouter.post("/reset", (_req, res, next) => {
     const p = getProvider();
     if (!isMock(p)) return res.status(400).json({ error: "reset is only available with USE_MOCK=true" });
     p.reset();
+    resetHistory();
     res.json({ ok: true });
   } catch (err) {
     next(err);

@@ -2,6 +2,7 @@
 
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
+import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { EventInput } from "@fullcalendar/core";
 import { useEffect, useMemo, useRef } from "react";
@@ -86,7 +87,7 @@ export default function WeekCalendar({ events, changes, focusDate, onRange }: Pr
   return (
     <FullCalendar
       ref={ref}
-      plugins={[timeGridPlugin, interactionPlugin]}
+      plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin]}
       initialView="timeGridWeek"
       initialDate={initialDate()}
       weekends={false}
@@ -97,7 +98,10 @@ export default function WeekCalendar({ events, changes, focusDate, onRange }: Pr
       slotDuration="00:30:00"
       expandRows
       height="100%"
-      headerToolbar={{ left: "prev,next today", center: "title", right: "" }}
+      headerToolbar={{ left: "prev,next today", center: "title", right: "timeGridDay,timeGridWeek,dayGridMonth" }}
+      buttonText={{ today: "Today", day: "Day", week: "Week", month: "Month" }}
+      dayMaxEvents={4}
+      fixedWeekCount={false}
       events={fcEvents}
       eventClick={(info) => {
         if (info.event.url) {

@@ -20,6 +20,12 @@ export function demoWeekStart(now = new Date()): Date {
   return d;
 }
 
+function plusWeek(d: Date): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + 7);
+  return x;
+}
+
 function at(weekStart: Date, dayOffset: number, hhmm: string): string {
   const [h, m] = hhmm.split(":").map(Number);
   const d = new Date(weekStart);
@@ -55,6 +61,11 @@ function ev(
 // a brutally heavy Wednesday, lighter Thursday/Friday.
 export function seedEvents(ws = demoWeekStart()): CalEvent[] {
   n = 0;
+  // This week and next week, so there are always upcoming days to demo on.
+  return [...seedWeek(ws), ...seedWeek(plusWeek(ws))];
+}
+
+function seedWeek(ws: Date): CalEvent[] {
   const P = "priya@acme.com", S = "sam@acme.com", D = "dev@acme.com", M = "mia@acme.com";
   return [
     // Monday: three back-to-backs in the morning
@@ -90,12 +101,23 @@ export function seedEvents(ws = demoWeekStart()): CalEvent[] {
     ev(ws, 4, "09:30", "10:00", "Team standup", [D, M, P]),
     ev(ws, 4, "11:00", "11:45", "Skip-level with Dev", [D]),
     ev(ws, 4, "14:00", "15:00", "Weekly demo", [P, S, D, M]),
+
+    // Protected focus time. Friday's block has a NEW invite landing on top of it.
+    ev(ws, 3, "11:30", "13:30", "Focus time", [], { kind: "focus", organizer: ME }),
+    ev(ws, 4, "15:00", "17:00", "Focus time", [], { kind: "focus", organizer: ME }),
+    ev(ws, 4, "15:30", "16:00", "Partner check-in", [S], { status: "needsAction" }),
   ];
 }
 
 // Other people's calendars (busy time not already implied by shared events).
 // Used by the scheduler to find mutual availability.
 export function seedBusy(ws = demoWeekStart()): Record<string, BusyBlock[]> {
+  const a = seedBusyWeek(ws);
+  const b = seedBusyWeek(plusWeek(ws));
+  return Object.fromEntries(Object.keys(a).map((k) => [k, [...a[k], ...b[k]]]));
+}
+
+function seedBusyWeek(ws: Date): Record<string, BusyBlock[]> {
   const b = (day: number, s: string, e: string): BusyBlock => ({ start: at(ws, day, s), end: at(ws, day, e) });
   return {
     "priya@acme.com": [b(0, "09:00", "09:30"), b(1, "10:30", "11:30"), b(2, "12:30", "13:30"), b(3, "09:00", "12:00"), b(4, "13:00", "14:00")],

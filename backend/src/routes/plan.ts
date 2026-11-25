@@ -5,8 +5,11 @@ import { validateChanges } from "../ai/validate.js";
 import { config } from "../config.js";
 import { getProvider } from "../providers/index.js";
 import { describe } from "../ai/time.js";
+import type { HistoryItem } from "../history.js";
 import { log } from "../logger.js";
 import type { Change, Plan } from "../types.js";
+import { loadRules } from "../rules.js";
+import { getHistory } from "../state.js";
 
 export interface LLMConfig {
   llm: LLM;
@@ -34,7 +37,7 @@ export function createPlanRouter(getLLM: () => LLMConfig | null = realLLM) {
       if (!cfg) return res.status(503).json({ error: "ANTHROPIC_API_KEY is not set. Add it to backend/.env and restart the backend." });
 
       const provider = getProvider();
-      const raw = await runPlanner({ llm: cfg.llm, model: cfg.model, provider, intent, currentPlan: req.body?.currentPlan ?? null });
+      const raw = await runPlanner({ llm: cfg.llm, model: cfg.model, provider, intent, currentPlan: req.body?.currentPlan ?? null, rules: loadRules() });
       const { changes, errors } = await validateChanges(provider, raw.changes);
       log.info("plan validated", {
         changes: changes.map((c) => ({ id: c.id, type: c.type, title: c.title ?? c.eventTitle, when: c.to ? `${describe(new Date(c.to.start))} - ${describe(new Date(c.to.end))}` : undefined, warning: c.warning, addMeetLink: c.addMeetLink })),
@@ -44,6 +47,9 @@ export function createPlanRouter(getLLM: () => LLMConfig | null = realLLM) {
         summary: raw.summary,
         changes,
         warnings: errors.map((e) => e.error),
+        source: "command",
+        rulesApplied: raw.rulesApplied,
+        trace: raw.trace,
       };
       res.json({ plan });
     } catch (err) {
@@ -71,11 +77,17 @@ export function createPlanRouter(getLLM: () => LLMConfig | null = realLLM) {
       log.info("apply requested", { count: incoming.length, ids: incoming.map((c) => c.id) });
       const { changes, errors } = await validateChanges(provider, incoming);
       const applied: { id: string; type: string; title: string; link?: string; eventId?: string }[] = [];
+      const items: HistoryItem[] = [];
+      const original = new Map<string, { start: string; end: string }>();
       const failed = [...errors];
 
       for (const c of changes) {
         try {
           let link: string | undefined;
+          if (c.eventId && (c.type === "move" || c.type === "shorten")) {
+            const ev = await provider.getEvent(c.eventId);
+            if (ev) original.set(c.id, { start: ev.start, end: ev.end });
+          }
           let eventId: string | undefined;
           if (c.type === "create") {
             const made = await provider.create({ title: c.title!, start: c.to!.start, end: c.to!.end, attendees: c.attendees, kind: c.kind, addMeetLink: c.addMeetLink });
@@ -88,13 +100,20 @@ export function createPlanRouter(getLLM: () => LLMConfig | null = realLLM) {
             await provider.decline(c.eventId!);
           }
           applied.push({ id: c.id, type: c.type, title: c.title ?? c.eventTitle ?? "", ...(link ? { link } : {}), ...(eventId ? { eventId } : {}) });
+          items.push({ changeId: c.id, type: c.type, title: c.title ?? c.eventTitle ?? "", eventId: eventId ?? c.eventId, from: original.get(c.id), to: c.to });
         } catch (err) {
           log.error("apply failed for a change", { id: c.id, err });
           failed.push({ id: c.id, error: (err as Error).message });
         }
       }
       log.info("apply result", { applied: applied.length, failed });
-      res.json({ applied, failed });
+      let historyId: string | undefined;
+      if (items.length) {
+        const intent = String(req.body?.intent ?? "").slice(0, 300);
+        const source = req.body?.source === "fix" || req.body?.source === "focus" ? req.body.source : "command";
+        historyId = getHistory().add({ intent: intent || "Applied changes", source, summary: String(req.body?.summary ?? "").slice(0, 300), items }).id;
+      }
+      res.json({ applied, failed, historyId });
     } catch (err) {
       next(err);
     }

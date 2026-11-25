@@ -29,7 +29,12 @@ export class GoogleProvider implements CalendarProvider {
       end: e.end.dateTime,
       attendees,
       organizer: e.organizer?.email ?? undefined,
-      kind: e.eventType === "focusTime" ? "focus" : e.eventType === "outOfOffice" ? "personal" : "meeting",
+      kind:
+        e.eventType === "focusTime" || e.extendedProperties?.private?.tenxKind === "focus"
+          ? "focus"
+          : e.eventType === "outOfOffice"
+            ? "personal"
+            : "meeting",
       status: me?.responseStatus === "declined" ? "declined" : me?.responseStatus === "needsAction" ? "needsAction" : "accepted",
       meetLink: e.hangoutLink ?? e.conferenceData?.entryPoints?.find((p) => p.entryPointType === "video")?.uri ?? undefined,
     };
@@ -85,6 +90,8 @@ export class GoogleProvider implements CalendarProvider {
         start: { dateTime: input.start },
         end: { dateTime: input.end },
         attendees: (input.attendees ?? []).filter((a) => a !== this.selfEmail).map((email) => ({ email })),
+        // Focus blocks are tagged so the defender can recognise them later.
+        ...(input.kind === "focus" ? { extendedProperties: { private: { tenxKind: "focus" } }, colorId: "2" } : {}),
         ...(input.addMeetLink
           ? { conferenceData: { createRequest: { requestId: randomUUID(), conferenceSolutionKey: { type: "hangoutsMeet" } } } }
           : {}),
@@ -122,6 +129,21 @@ export class GoogleProvider implements CalendarProvider {
       return;
     }
     const attendees = (e.attendees ?? []).map((a) => (a.self || a.email === this.selfEmail ? { ...a, responseStatus: "declined" } : a));
+    await this.cal.events.patch({ calendarId: "primary", eventId, sendUpdates: "all", requestBody: { attendees } });
+  }
+
+  async remove(eventId: string): Promise<void> {
+    await this.cal.events.delete({ calendarId: "primary", eventId, sendUpdates: "all" });
+  }
+
+  // Undo of a decline: re-accept as an attendee, or un-cancel an event the user organised.
+  async restore(eventId: string): Promise<void> {
+    const { data: e } = await this.cal.events.get({ calendarId: "primary", eventId });
+    if (e.status === "cancelled") {
+      await this.cal.events.patch({ calendarId: "primary", eventId, sendUpdates: "all", requestBody: { status: "confirmed" } });
+      return;
+    }
+    const attendees = (e.attendees ?? []).map((a) => (a.self || a.email === this.selfEmail ? { ...a, responseStatus: "accepted" } : a));
     await this.cal.events.patch({ calendarId: "primary", eventId, sendUpdates: "all", requestBody: { attendees } });
   }
 

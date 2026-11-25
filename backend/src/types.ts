@@ -45,6 +45,9 @@ export interface Plan {
   summary: string;
   changes: Change[];
   warnings?: string[]; // things the server dropped or could not honour
+  source?: "command" | "fix" | "focus";
+  rulesApplied?: string[]; // which of the user's rules shaped this plan
+  trace?: string[]; // human-readable steps the planner took
 }
 
 export interface CreateInput {
@@ -77,4 +80,6 @@ export interface CalendarProvider {
   create(input: CreateInput): Promise<CalEvent>;
   move(eventId: string, start: string, end: string): Promise<CalEvent>;
   decline(eventId: string): Promise<void>;
+  remove(eventId: string): Promise<void>; // delete an event (used by Undo)
+  restore(eventId: string): Promise<void>; // bring back a declined/cancelled event (used by Undo)
 }

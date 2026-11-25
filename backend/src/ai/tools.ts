@@ -1,4 +1,6 @@
 import type { CalendarProvider } from "../types.js";
+import { DEFAULT_RULES, type Rules } from "../rules.js";
+import { buildFocusPlan } from "./insights.js";
 import { findCommonSlots } from "./slots.js";
 import { dayName, parseDateInput, toLocalISO } from "./time.js";
 
@@ -43,11 +45,25 @@ export const TOOLS = [
         duration_minutes: { type: "integer" },
         range_start: { type: "string", description: "Local date YYYY-MM-DD or ISO datetime" },
         range_end: { type: "string", description: "Local date YYYY-MM-DD (inclusive) or ISO datetime" },
-        earliest_hour: { type: "integer", description: "Earliest start hour, 0-23. Default 9. 'Not mornings' means 12." },
-        latest_hour: { type: "integer", description: "Meeting must end by this hour, 1-24. Default 18." },
+        earliest_hour: { type: "integer", description: "Earliest start hour, 0-23. Defaults to the user's working hours. 'Not mornings' means 12." },
+        latest_hour: { type: "integer", description: "Meeting must end by this hour, 1-24. Defaults to the user's working hours." },
         max_results: { type: "integer", description: "Default 5" },
       },
       required: ["emails", "duration_minutes", "range_start", "range_end"],
+    },
+  },
+  {
+    name: "plan_focus_blocks",
+    description:
+      "Find where to protect focus (deep-work) time around the user's meetings. Computed by code from the user's rules. Use for requests like 'protect 2 hours of focus time every day'. Returns blocks ready to put in propose_plan as create changes with kind 'focus' and title 'Focus time'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        range_start: { type: "string", description: "Local date YYYY-MM-DD" },
+        range_end: { type: "string", description: "Local date YYYY-MM-DD (inclusive)" },
+        hours_per_day: { type: "number", description: "Defaults to the user's rule" },
+      },
+      required: ["range_start", "range_end"],
     },
   },
   {
@@ -58,6 +74,7 @@ export const TOOLS = [
       type: "object",
       properties: {
         summary: { type: "string", description: "1-2 plain sentences for the user describing the plan or the question you need answered." },
+        rules_applied: { type: "array", items: { type: "string" }, description: "Which of the user's rules or preferences shaped this plan, in a few words each (e.g. 'Lunch 13:00-14:00 kept free'). Empty if none." },
         changes: {
           type: "array",
           items: {
@@ -98,6 +115,7 @@ export const TOOLS = [
 export interface ToolContext {
   provider: CalendarProvider;
   now: Date;
+  rules?: Rules;
 }
 
 const fmt = (iso: string) => {
@@ -106,7 +124,14 @@ const fmt = (iso: string) => {
 };
 
 export async function executeTool(name: string, input: Record<string, any>, ctx: ToolContext): Promise<unknown> {
+  const rules = ctx.rules ?? DEFAULT_RULES;
   switch (name) {
+    case "plan_focus_blocks": {
+      const rangeStart = parseDateInput(String(input.range_start));
+      const rangeEnd = parseDateInput(String(input.range_end), true);
+      const plan = await buildFocusPlan({ provider: ctx.provider, rules, rangeStart, rangeEnd, now: ctx.now, hoursPerDay: input.hours_per_day ? Number(input.hours_per_day) : undefined });
+      return { summary: plan.summary, blocks: plan.changes.map((c) => ({ title: c.title, kind: "focus", start: c.to!.start, end: c.to!.end })), warnings: plan.warnings };
+    }
     case "get_events": {
       const s = parseDateInput(String(input.start));
       const e = parseDateInput(String(input.end), true);
@@ -149,8 +174,9 @@ export async function executeTool(name: string, input: Record<string, any>, ctx:
         durationMin: duration,
         rangeStart,
         rangeEnd,
-        earliestHour: Number(input.earliest_hour ?? 9),
-        latestHour: Number(input.latest_hour ?? 18),
+        earliestHour: Number(input.earliest_hour ?? rules.workStart),
+        latestHour: Number(input.latest_hour ?? rules.workEnd),
+        lunch: rules.protectLunch ? { start: rules.lunchStart, end: rules.lunchEnd } : null,
         busy: Object.values(busyMap).flat(),
         myEvents,
         now: ctx.now,

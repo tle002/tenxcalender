@@ -13,3 +13,4 @@ backend/.google-tokens.json
 next-env.d.ts
 .DS_Store
 Thumbs.db
+backend/data/

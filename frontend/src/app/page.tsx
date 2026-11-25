@@ -5,12 +5,14 @@ import CommandBar from "@/components/CommandBar";
 import ProposalPanel from "@/components/ProposalPanel";
 import WeekCalendar from "@/components/WeekCalendar";
 import ConnectCard from "@/components/ConnectCard";
+import Logo from "@/components/Logo";
+import { BriefingPanel, HistoryPanel, RulesPanel, type Tab } from "@/components/SidePane";
 import { ApiError, api, type Health } from "@/lib/api";
 import { clientLog } from "@/lib/clientLog";
 import { fmtRange } from "@/lib/format";
 import type { CalEvent, Plan } from "@/lib/types";
 
-const DEMO_EXAMPLES = ["Find 45 min with Priya and Sam this week, not mornings"];
+const DEMO_EXAMPLES = ["Find 45 min with Priya and Sam this week, not mornings", "Protect 2 hours of focus time every day this week"];
 const GOOGLE_EXAMPLES = ["Create a 30 minute meeting this Friday afternoon with a Meet link"];
 
 export default function Home() {
@@ -23,6 +25,24 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ text: string; links: string[] } | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
+  const [tab, setTab] = useState<Tab>("briefing");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [lastIntent, setLastIntent] = useState("");
+  const [recents, setRecents] = useState<string[]>([]);
+  // The briefing always covers one work week, whichever view (day/week/month) is showing.
+  const briefingRange = useMemo(() => {
+    if (!range) return null;
+    const rs = new Date(range.start), re = new Date(range.end);
+    const now = new Date();
+    const base = re.getTime() - rs.getTime() > 8 * 86400000 && now >= rs && now < re ? now : rs;
+    const mon = new Date(base);
+    mon.setHours(0, 0, 0, 0);
+    const dow = mon.getDay();
+    mon.setDate(mon.getDate() + (dow === 0 ? 1 : dow === 6 ? 2 : 1 - dow));
+    const end = new Date(mon);
+    end.setDate(end.getDate() + 7);
+    return { start: mon.toISOString(), end: end.toISOString() };
+  }, [range]);
   const isMock = health?.mock ?? true;
   const needsConnect = Boolean(health && !health.mock && !health.connected);
 
@@ -40,6 +60,10 @@ export default function Home() {
         clientLog("info", "app loaded", { mock: h.mock, connected: h.connected, email: h.email, llmConfigured: h.llmConfigured, model: h.model, ua: navigator.userAgent });
       })
       .catch((e: Error) => setError(e.message));
+  }, []);
+
+  useEffect(() => {
+    try { setRecents(JSON.parse(localStorage.getItem("tenx.recents") ?? "[]")); } catch { /* storage unavailable */ }
   }, []);
 
   useEffect(() => {
@@ -93,6 +117,13 @@ export default function Home() {
       clientLog("info", "plan received", { summary: next.summary, changes: next.changes.length, dropped: next.warnings });
       setPlan(next);
       setExcluded(new Set());
+      setTab("plan");
+      setLastIntent(text);
+      setRecents((r) => {
+        const n = [text, ...r.filter((x) => x !== text)].slice(0, 4);
+        try { localStorage.setItem("tenx.recents", JSON.stringify(n)); } catch { /* ignore */ }
+        return n;
+      });
       return true;
     } catch (e) {
       clientLog("error", "plan failed", { message: (e as Error).message });
@@ -135,7 +166,7 @@ export default function Home() {
     setError(null);
     try {
       clientLog("info", "apply clicked", { ids: included.map((c) => c.id) });
-      const res = await api.apply(included);
+      const res = await api.apply(included, { intent: plan?.source === "fix" || plan?.source === "focus" ? plan.summary : lastIntent, source: plan?.source ?? "command", summary: plan?.summary });
       if (res.failed.length) setError(`Some changes could not be applied: ${res.failed.map((f) => f.error).join("; ")}`);
       if (res.applied.length) {
         const what = res.applied
@@ -153,6 +184,8 @@ export default function Home() {
       }
       setPlan(null);
       setExcluded(new Set());
+      setRefreshKey((k) => k + 1);
+      setTab("briefing");
       const list = await loadEvents();
       const created = res.applied.flatMap((a) => (a.eventId ? [a.eventId] : []));
       clientLog("info", "apply finished", { applied: res.applied.length, failed: res.failed, eventsInView: list.length, createdEventsVisibleInThisWeek: created.map((id) => ({ id, visible: list.some((e) => e.id === id) })) });
@@ -169,6 +202,32 @@ export default function Home() {
     setExcluded(new Set());
   };
 
+  const openPlan = useCallback((p: Plan) => {
+    setError(null);
+    setPlan(p);
+    setExcluded(new Set());
+    setTab("plan");
+  }, []);
+
+  const protectFocus = async () => {
+    if (!briefingRange) return;
+    setPlanning(true);
+    try {
+      openPlan((await api.focusPlan(briefingRange.start, briefingRange.end)).plan);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPlanning(false);
+    }
+  };
+
+  const onPaneError = useCallback((m: string) => setError(m), []);
+  const afterUndo = (m: string) => {
+    setNotice({ text: m, links: [] });
+    setRefreshKey((k) => k + 1);
+    void loadEvents();
+  };
+
   const disconnect = async () => {
     try {
       await api.logout();
@@ -183,6 +242,7 @@ export default function Home() {
   const resetDemo = async () => {
     try {
       await api.reset();
+      setRefreshKey((k) => k + 1);
       discard();
       setError(null);
       await loadEvents();
@@ -194,8 +254,8 @@ export default function Home() {
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brand">tenxcalender</div>
-        <CommandBar busy={planning} disabled={needsConnect} refining={Boolean(plan && plan.changes.length)} examples={isMock ? DEMO_EXAMPLES : GOOGLE_EXAMPLES} onSubmit={submit} />
+        <div className="brand"><Logo size={36} /><div className="brand-name">tenxcalender<span className="brand-tag">Your calendar, on intent</span></div></div>
+        <CommandBar busy={planning} disabled={needsConnect} refining={Boolean(plan && plan.changes.length)} examples={[...recents, ...(isMock ? DEMO_EXAMPLES : GOOGLE_EXAMPLES)].filter((x, i, a) => a.indexOf(x) === i).slice(0, 5)} onSubmit={submit} />
         <div className="topbar-right">
           <span className="mode" title={isMock ? "Changes stay inside this app. Nothing is sent to Google Calendar." : "Connected to Google Calendar"}>
             {!health ? "connecting…" : isMock ? "Demo calendar" : health.connected ? `Google · ${health.email}` : "Not connected"}
@@ -229,7 +289,24 @@ export default function Home() {
         <section className="calendar-pane">
           <WeekCalendar events={events} changes={included} focusDate={focusDate} onRange={onRange} />
         </section>
-        <ProposalPanel plan={plan} excluded={excluded} applying={applying} onToggle={toggle} onSwap={swap} onApply={apply} onDiscard={discard} />
+        <aside className="side-pane">
+          <div className="tabs" role="tablist">
+            {(["briefing", "plan", "history", "rules"] as Tab[]).map((t) => (
+              <button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? "is-active" : ""}`} onClick={() => setTab(t)}>
+                {t === "briefing" ? "Briefing" : t === "plan" ? `Plan${included.length ? ` (${included.length})` : ""}` : t === "history" ? "History" : "Rules"}
+              </button>
+            ))}
+          </div>
+          {tab === "briefing" && (
+            <>
+              <BriefingPanel range={briefingRange} refreshKey={refreshKey} onPlan={openPlan} onError={onPaneError} />
+              <button className="btn focus-btn" onClick={protectFocus} disabled={planning}>Protect focus time this week</button>
+            </>
+          )}
+          {tab === "plan" && <ProposalPanel plan={plan} excluded={excluded} applying={applying} onToggle={toggle} onSwap={swap} onApply={apply} onDiscard={discard} />}
+          {tab === "history" && <HistoryPanel refreshKey={refreshKey} onUndone={afterUndo} onError={onPaneError} />}
+          {tab === "rules" && <RulesPanel onError={onPaneError} onSaved={() => setRefreshKey((k) => k + 1)} />}
+        </aside>
       </main>
       )}
     </div>

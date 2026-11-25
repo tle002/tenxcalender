@@ -15,6 +15,7 @@ export interface SlotQuery {
   now: Date;
   maxResults: number;
   stepMin?: number;
+  lunch?: { start: number; end: number } | null; // hours; slots overlapping it are ranked lower
 }
 
 export interface Slot {
@@ -58,9 +59,11 @@ export function findCommonSlots(q: SlotQuery): Slot[] {
       if (mine.some(([ms, me]) => me === t || ms === e)) score += 1.5; // would create a back-to-back
       const d = new Date(t);
       if (d.getMinutes() % 30 !== 0) score += 0.3; // prefer clean :00 / :30 starts
-      const lunchS = new Date(d).setHours(12, 30, 0, 0);
-      const lunchE = new Date(d).setHours(13, 30, 0, 0);
-      if (t < lunchE && e > lunchS) score += 0.7; // keep lunch free
+      if (q.lunch) {
+        const lunchS = new Date(d).setHours(Math.floor(q.lunch.start), (q.lunch.start % 1) * 60, 0, 0);
+        const lunchE = new Date(d).setHours(Math.floor(q.lunch.end), (q.lunch.end % 1) * 60, 0, 0);
+        if (t < lunchE && e > lunchS) score += 0.7; // keep lunch free
+      }
       candidates.push({ start: d, end: new Date(e), score });
     }
     dayIndex++;

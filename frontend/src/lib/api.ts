@@ -1,4 +1,4 @@
-import type { CalEvent, Change, Plan } from "./types";
+import type { Briefing, CalEvent, Change, HistoryEntry, Plan, Rules } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -42,9 +42,19 @@ export const api = {
   reset: () => request<{ ok: boolean }>("/api/reset", { method: "POST" }),
   plan: (intent: string, currentPlan?: Plan | null) =>
     request<{ plan: Plan }>("/api/plan", { method: "POST", body: JSON.stringify({ intent, currentPlan }) }),
-  apply: (changes: Change[]) =>
-    request<{ applied: { id: string; type: string; title: string; link?: string; eventId?: string }[]; failed: { id: string; error: string }[] }>(
+  apply: (changes: Change[], meta: { intent?: string; source?: string; summary?: string } = {}) =>
+    request<{ applied: { id: string; type: string; title: string; link?: string; eventId?: string }[]; failed: { id: string; error: string }[]; historyId?: string }>(
       "/api/apply",
-      { method: "POST", body: JSON.stringify({ changes }) },
+      { method: "POST", body: JSON.stringify({ changes, ...meta }) },
     ),
+  briefing: (start: string, end: string) =>
+    request<{ briefing: Briefing }>(`/api/briefing?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
+  narrative: (summary: string, issues: { severity: string; title: string; detail: string }[]) =>
+    request<{ text: string; source: string }>("/api/briefing/narrative", { method: "POST", body: JSON.stringify({ summary, issues }) }),
+  focusPlan: (start: string, end: string) =>
+    request<{ plan: Plan }>("/api/focus/plan", { method: "POST", body: JSON.stringify({ start, end }) }),
+  history: () => request<{ history: HistoryEntry[] }>("/api/history"),
+  undo: (id: string) => request<{ entry: HistoryEntry; notes: string[]; failed: number }>(`/api/history/${id}/undo`, { method: "POST" }),
+  rules: () => request<{ rules: Rules }>("/api/rules"),
+  saveRules: (rules: Rules) => request<{ rules: Rules }>("/api/rules", { method: "PUT", body: JSON.stringify({ rules }) }),
 };
