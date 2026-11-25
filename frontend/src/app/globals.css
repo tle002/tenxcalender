@@ -244,3 +244,7 @@ button { font: inherit; }
 .modal-row { color: var(--muted); font-size: 14px; line-height: 1.6; word-break: break-word; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 .modal-actions a.btn { text-decoration: none; display: inline-block; }
+
+/* 30-minute events: one line, truncated with an ellipsis; full title and time on hover */
+.ev-short { display: flex; align-items: center; height: 100%; }
+.ev-short .ev-title { white-space: nowrap !important; overflow: hidden; text-overflow: ellipsis; font-size: 15px; max-width: 100%; }

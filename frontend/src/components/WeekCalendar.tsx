@@ -76,12 +76,6 @@ export default function WeekCalendar({ events, changes, focusDate, onRange, onEv
     return out;
   }, [events, changes]);
 
-  // Weekends stay hidden unless the plan (or an event) lands on one.
-  const showWeekends = useMemo(() => {
-    const isWeekend = (iso?: string) => (iso ? [0, 6].includes(new Date(iso).getDay()) : false);
-    return changes.some((c) => isWeekend(c.to?.start)) || events.some((e) => isWeekend(e.start));
-  }, [changes, events]);
-
   // Jump to the week that holds the plan if it is not on screen.
   useEffect(() => {
     if (!focusDate) return;
@@ -97,7 +91,8 @@ export default function WeekCalendar({ events, changes, focusDate, onRange, onEv
       plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin]}
       initialView="timeGridWeek"
       initialDate={initialDate()}
-      weekends={showWeekends}
+      weekends
+      firstDay={1}
       allDaySlot={false}
       nowIndicator
       slotMinTime="08:00:00"
@@ -145,10 +140,11 @@ export default function WeekCalendar({ events, changes, focusDate, onRange, onEv
             </div>
           );
         }
+        const isShort = (arg.event.end?.getTime() ?? 0) - (arg.event.start?.getTime() ?? 0) <= 50 * 60_000;
         return (
-          <div className="ev ev-plain">
+          <div className={`ev ev-plain ${isShort ? "ev-short" : ""}`} title={`${arg.event.title} · ${arg.timeText}`}>
             <div className="ev-title">{arg.event.title}</div>
-            {(arg.event.end?.getTime() ?? 0) - (arg.event.start?.getTime() ?? 0) > 35 * 60_000 && <div className="ev-time">{arg.timeText}</div>}
+            {!isShort && <div className="ev-time">{arg.timeText}</div>}
           </div>
         );
       }}

@@ -336,7 +336,7 @@ export default function Home() {
       })()}
 
       <footer className="dock">
-        <CommandBar busy={planning} disabled={needsConnect} refining={Boolean(plan && plan.changes.length)} replying={Boolean(pending)} examples={[...recents, ...(isMock ? DEMO_EXAMPLES : GOOGLE_EXAMPLES)].filter((x, i, a) => a.indexOf(x) === i).slice(0, 5)} onSubmit={submit} />
+        <CommandBar busy={planning} disabled={needsConnect} refining={Boolean(plan && plan.changes.length)} replying={Boolean(pending)} examples={[...(recents.length ? [recents[0]] : []), (isMock ? DEMO_EXAMPLES : GOOGLE_EXAMPLES)[0]].filter((x, i, a) => a.indexOf(x) === i)} onSubmit={submit} />
       </footer>
     </div>
   );
